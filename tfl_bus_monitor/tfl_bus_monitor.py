@@ -28,6 +28,7 @@ if __name__ != '__main__':
 
 
 def get_config_path() -> str:
+    """Return path to config file"""
     conf_file_name = "busstop_config.ini"
     if "BUSSTOP_HOME" in os.environ:
         return os.environ[f"BUSSTOP_HOME/{conf_file_name}"]
@@ -39,7 +40,7 @@ def get_config_path() -> str:
 
 
 class TFLBusMonitor:
-
+    """Provide stop information as json or text """
     def __init__(self) -> None:
         self.CONFIG = configparser.ConfigParser(
             converters={'list': lambda x: [i.strip() for i in x.split(',')]})
