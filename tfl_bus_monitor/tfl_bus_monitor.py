@@ -98,7 +98,8 @@ class TFLBusMonitor:
         if stop_id in self.stop_name_cache:
             return self.stop_name_cache[stop_id]
         json_result = self.get_tfl(stop_id, 10)
-        stop_name = json_result['commonName']
+        stop_name = json_result.get('commonName', 'Not Found')
+        #stop_name = json_result['commonName']
 
         if stop_name:
             self.stop_name_cache[stop_id] = stop_name  # Cache the stop name
