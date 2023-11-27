@@ -20,9 +20,15 @@ from project_name import get_config_path
 ```
 
 ```bash
-$ busstop
-#or
-$ busstop -t
+% busstop -h
+usage: busstop [-h] [-t | -j]
+
+Get bus stop data from TFL
+
+options:
+  -h, --help        show this help message and exit
+  -t, --print-text  print formatted text
+  -j, --print-json  pretty print json (default)
 ```
 
 ## Development
