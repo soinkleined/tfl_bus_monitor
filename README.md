@@ -26,8 +26,8 @@ Get bus stop data from TFL
 
 options:
   -h, --help        show this help message and exit
-  -t, --print-text  print formatted text
-  -j, --print-json  pretty print json (default)
+  -t, --text        print formatted text
+  -j, --json        pretty print json (default)
 ```
 
 ## Development

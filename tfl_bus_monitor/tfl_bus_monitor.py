@@ -14,6 +14,7 @@ from os import path
 
 import pytz
 import requests
+import argparse
 
 logging.basicConfig(
     format='[%(asctime)s] [%(process)d] [%(levelname)s] %(message)s',
@@ -153,10 +154,8 @@ class TFLBusMonitor:
 
 def main() -> None:
     """Main entry point"""
-    import argparse
 
-    bus_monitor = TFLBusMonitor()
-    bus_json = bus_monitor.get_stops()
+    bus_json = TFLBusMonitor().get_stops()
 
     def print_json(busstop_json: List[Dict[str, Union[str, List[Dict[str, str]]]]]) -> None:
         """Pretty print JSON"""
@@ -185,10 +184,10 @@ def main() -> None:
     description = "Get bus stop data from TFL"
     parser = argparse.ArgumentParser(description=description, formatter_class=formatter)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-t', '--print-text',
+    group.add_argument('-t', '--text',
                        action='store_true',
                        help='print formatted text')
-    group.add_argument('-j', '--print-json',
+    group.add_argument('-j', '--json',
                        action='store_true',
                        help='pretty print json (default)')
     args = parser.parse_args()
