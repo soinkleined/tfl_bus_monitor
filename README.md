@@ -14,8 +14,7 @@ pip install tfl_bus_monitor
 ## Usage
 
 ```py
-from project_name import TFLBusMonitor
-from project_name import get_config_path
+from tfl_bus_monitor import get_stops, get_config_path
 
 ```
 
