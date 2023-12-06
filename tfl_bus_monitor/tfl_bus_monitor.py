@@ -7,6 +7,7 @@ import os
 import time
 import math
 import json
+import argparse
 from importlib import resources
 from datetime import datetime as dt
 from typing import Any, List, Dict, Union
@@ -14,7 +15,6 @@ from os import path
 
 import pytz
 import requests
-import argparse
 
 logging.basicConfig(
     format='[%(asctime)s] [%(process)d] [%(levelname)s] %(message)s',
@@ -99,8 +99,7 @@ class TFLBusMonitor:
         if stop_id in self.stop_name_cache:
             return self.stop_name_cache[stop_id]
         json_result = self.get_tfl(stop_id, 10)
-        stop_name = json_result.get('commonName', 'Not Found')
-        #stop_name = json_result['commonName']
+        stop_name = json_result.get('commonName') if json_result else None
 
         if stop_name:
             self.stop_name_cache[stop_id] = stop_name  # Cache the stop name
@@ -192,7 +191,7 @@ def main() -> None:
                        help='pretty print json (default)')
     args = parser.parse_args()
 
-    if args.print_text:
+    if args.text:
         print_text(bus_json)
     else:
         print_json(bus_json)

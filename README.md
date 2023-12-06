@@ -5,7 +5,6 @@
 Download Transport For London bus arrival time information.
 
 ## Install it from PyPI
-PyPi package publishing is halted as they are currently not registering new users.
 
 ```bash
 pip install tfl_bus_monitor
