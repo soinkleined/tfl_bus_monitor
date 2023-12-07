@@ -10,7 +10,7 @@ long_description = (this_directory / "README.md").read_text()
 setup(
     name='tfl_bus_monitor',
     python_requires='>=3.9',
-    version='0.7',
+    version='0.8',
     author='David Klein',
     author_email='david@soinkleined.com',
     url='https://www.soinkleined.com',

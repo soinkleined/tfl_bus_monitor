@@ -114,31 +114,31 @@ class TFLBusMonitor:
         json_result = self.get_tfl(f"{stop_id}/Arrivals", 10)
         if json_result is not None and isinstance(json_result, list):
             json_result.sort(key=lambda x: x["expectedArrival"])
-            stop_name = self.get_stop_name(stop_id)
-            date_and_time = dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}")
-            for item in json_result:
-                num += 1
-                read_time = dt.strptime(item['expectedArrival'], "%Y-%m-%dT%H:%M:%SZ")
-                local_dt = self.utc_to_local(read_time)
-                arrival_time = local_dt.strftime(self.time_format)
-                away_min = math.floor(int(item['timeToStation']) / 60)
-                due_in = 'due' if away_min == 0 else f'{str(away_min)}min'
-                bus_info = {"number": str(num),
-                            "lineName": str(item['lineName']),
-                            "destinationName": str(item['destinationName']),
-                            "arrivalTime": arrival_time,
-                            "dueIn": due_in}
-                busses.append(bus_info)
-                if num == num_busses:
-                    break
-            if num == 0:
-                bus_info = {"noInfo": "No information at this time."}
-                busses.append(bus_info)
-            return {
-                "stopName": stop_name,
-                "dateAndTime": date_and_time,
-                "busses": busses,
-            }
+        stop_name = self.get_stop_name(stop_id)
+        date_and_time = dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}")
+        for item in json_result:
+            num += 1
+            read_time = dt.strptime(item['expectedArrival'], "%Y-%m-%dT%H:%M:%SZ")
+            local_dt = self.utc_to_local(read_time)
+            arrival_time = local_dt.strftime(self.time_format)
+            away_min = math.floor(int(item['timeToStation']) / 60)
+            due_in = 'due' if away_min == 0 else f'{str(away_min)}min'
+            bus_info = {"number": str(num),
+                        "lineName": str(item['lineName']),
+                        "destinationName": str(item['destinationName']),
+                        "arrivalTime": arrival_time,
+                        "dueIn": due_in}
+            busses.append(bus_info)
+            if num == num_busses:
+                break
+        if num == 0:
+            bus_info = {"noInfo": "No information at this time."}
+            busses.append(bus_info)
+        return {
+            "stopName": stop_name,
+            "dateAndTime": date_and_time,
+            "busses": busses,
+        }
 
     def get_stops(self) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
         """Download stop information"""

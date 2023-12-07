@@ -29,6 +29,3 @@ options:
   -j, --json        pretty print json (default)
 ```
 
-## Development
-
-Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.
