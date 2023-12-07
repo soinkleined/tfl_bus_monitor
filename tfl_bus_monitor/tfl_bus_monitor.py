@@ -44,19 +44,19 @@ def get_config_path() -> str:
 class TFLBusMonitor:
     """Provide stop information as json or text """
     def __init__(self) -> None:
-        self.CONFIG = configparser.ConfigParser(
+        self.config = configparser.ConfigParser(
             converters={'list': lambda x: [i.strip() for i in x.split(',')]})
         self.stop_name_cache: Dict[str, str] = {}
-        self.CONFIG_FILE: str = get_config_path()
-        self.URL: str = 'https://api.tfl.gov.uk/StopPoint/'
-        self.BACKOFF: int = 10
-        self.LOCAL_TZ = pytz.timezone('Europe/London')
-        self.DATE_FORMAT: str = "%Y-%m-%d"
-        self.TIME_FORMAT: str = "%H:%M:%S"
+        self.config_file: str = get_config_path()
+        self.url: str = 'https://api.tfl.gov.uk/StopPoint/'
+        self.backoff: int = 10
+        self.local_tz = pytz.timezone('Europe/London')
+        self.date_format: str = "%Y-%m-%d"
+        self.time_format: str = "%H:%M:%S"
 
     def utc_to_local(self, utc_dt: dt) -> dt:
         """Convert UTC time to local time"""
-        return utc_dt.replace(tzinfo=pytz.utc).astimezone(self.LOCAL_TZ)
+        return utc_dt.replace(tzinfo=pytz.utc).astimezone(self.local_tz)
 
     def get_tfl(self, tfl_id: str, timeout: int) -> Union[Dict[str, Any], None]:
         """Download TFL JSON data"""
@@ -66,32 +66,32 @@ class TFLBusMonitor:
 
         while response is None:
             try:
-                response = requests.get(self.URL + tfl_id, timeout=timeout)
+                response = requests.get(self.url + tfl_id, timeout=timeout)
                 response.raise_for_status()
                 retry_secs = 0
             except requests.exceptions.ConnectionError as conn_err:
                 error_info = {"error_type": "ConnectionError", "message": str(conn_err)}
-                retry_secs += self.BACKOFF
+                retry_secs += self.backoff
                 response = None
             except requests.exceptions.Timeout as timeout_err:
                 error_info = {"error_type": "Timeout", "message": str(timeout_err)}
-                retry_secs += self.BACKOFF
+                retry_secs += self.backoff
                 response = None
             except requests.exceptions.HTTPError as http_err:
                 error_info = {"error_type": "HTTPError", "message": str(http_err)}
-                retry_secs += self.BACKOFF
+                retry_secs += self.backoff
                 response = None
             except requests.exceptions.RequestException as req_err:
                 error_info = {"error_type": "RequestException", "message": str(req_err)}
-                retry_secs += self.BACKOFF
+                retry_secs += self.backoff
                 response = None
 
             if response is None:
-                logger.error(f"{error_info['error_type']}")
-                logger.error(f"{error_info['message']}")
-                logger.error(f"Retrying in {retry_secs} seconds.")
+                logger.error("%s", error_info['error_type'])
+                logger.error("%s", error_info['message'])
+                logger.error("Retrying in %d seconds.", retry_secs)
                 time.sleep(retry_secs)
-        logger.info(f"{response.status_code} {response.reason} -> {self.URL}{tfl_id}")
+        logger.info("%s. %s -> %s%s", response.status_code, response.reason, self.url, tfl_id)
         return response.json() if response else None
 
     def get_stop_name(self, stop_id: str) -> str:
@@ -111,42 +111,41 @@ class TFLBusMonitor:
         """Format bus schedule data"""
         busses = []
         num = 0
-        now = dt.now(self.LOCAL_TZ)
         json_result = self.get_tfl(f"{stop_id}/Arrivals", 10)
         if json_result is not None and isinstance(json_result, list):
             json_result.sort(key=lambda x: x["expectedArrival"])
-        stop_name = self.get_stop_name(stop_id)
-        date_and_time = now.strftime(f"{self.DATE_FORMAT} {self.TIME_FORMAT}")
-        for item in json_result:
-            num += 1
-            read_time = dt.strptime(item['expectedArrival'], "%Y-%m-%dT%H:%M:%SZ")
-            local_dt = self.utc_to_local(read_time)
-            arrival_time = local_dt.strftime(self.TIME_FORMAT)
-            away_min = math.floor(int(item['timeToStation']) / 60)
-            due_in = 'due' if away_min == 0 else f'{str(away_min)}min'
-            bus_info = {"number": str(num),
-                        "lineName": str(item['lineName']),
-                        "destinationName": str(item['destinationName']),
-                        "arrivalTime": arrival_time,
-                        "dueIn": due_in}
-            busses.append(bus_info)
-            if num == num_busses:
-                break
-        if num == 0:
-            bus_info = {"noInfo": "No information at this time."}
-            busses.append(bus_info)
-        return {
-            "stopName": stop_name,
-            "dateAndTime": date_and_time,
-            "busses": busses,
-        }
+            stop_name = self.get_stop_name(stop_id)
+            date_and_time = dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}")
+            for item in json_result:
+                num += 1
+                read_time = dt.strptime(item['expectedArrival'], "%Y-%m-%dT%H:%M:%SZ")
+                local_dt = self.utc_to_local(read_time)
+                arrival_time = local_dt.strftime(self.time_format)
+                away_min = math.floor(int(item['timeToStation']) / 60)
+                due_in = 'due' if away_min == 0 else f'{str(away_min)}min'
+                bus_info = {"number": str(num),
+                            "lineName": str(item['lineName']),
+                            "destinationName": str(item['destinationName']),
+                            "arrivalTime": arrival_time,
+                            "dueIn": due_in}
+                busses.append(bus_info)
+                if num == num_busses:
+                    break
+            if num == 0:
+                bus_info = {"noInfo": "No information at this time."}
+                busses.append(bus_info)
+            return {
+                "stopName": stop_name,
+                "dateAndTime": date_and_time,
+                "busses": busses,
+            }
 
     def get_stops(self) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
         """Download stop information"""
         all_stops = []
-        self.CONFIG.read(self.CONFIG_FILE)
-        for num, stop_id in enumerate(self.CONFIG.getlist('busstop', 'stopid')):
-            num_busses = int(self.CONFIG.getlist('busstop', 'num_busses')[num])
+        self.config.read(self.config_file)
+        for num, stop_id in enumerate(self.config.getlist('busstop', 'stopid')):
+            num_busses = int(self.config.getlist('busstop', 'num_busses')[num])
             all_stops.append(self.get_bus_time(stop_id, num_busses))
         return all_stops
 
