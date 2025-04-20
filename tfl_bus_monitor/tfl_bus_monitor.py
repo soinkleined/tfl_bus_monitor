@@ -1,3 +1,13 @@
+"""
+tfl_bus_monitor - Download and display TfL bus and tube arrival time information.
+
+Expected INI config format (busstop_config.ini):
+
+    [busstop]
+    stopid = 490008660N, 490004973E
+    num_services = 5, 3
+"""
+
 from pathlib import Path
 import configparser
 import logging
@@ -33,8 +43,14 @@ if __name__ != '__main__':
 
 
 def get_config_path() -> Path:
-    if "TFL_MONITOR_HOME" in os.environ:
-        return Path(os.environ["TFL_MONITOR_HOME"]) / DEFAULT_CONFIG_NAME
+    """
+    Resolve the configuration file path from:
+    1. $BUSSTOP_HOME
+    2. ~/busstop_config.ini
+    3. Embedded package config
+    """
+    if "BUSSTOP_HOME" in os.environ:
+        return Path(os.environ["BUSSTOP_HOME"]) / DEFAULT_CONFIG_NAME
     home_config = Path.home() / DEFAULT_CONFIG_NAME
     if home_config.is_file():
         return home_config
@@ -43,7 +59,10 @@ def get_config_path() -> Path:
 
 
 class TFLBusMonitor:
+    """Monitor for retrieving and formatting TfL StopPoint arrival data."""
+
     def __init__(self, config_file: Optional[Path] = None) -> None:
+        """Initialize the monitor with optional custom config file."""
         self.config = configparser.ConfigParser(
             converters={'list': lambda x: [i.strip() for i in x.split(',')]})
         self.stop_name_cache: Dict[str, str] = {}
@@ -54,9 +73,14 @@ class TFLBusMonitor:
         self.time_format = "%H:%M:%S"
 
     def utc_to_local(self, utc_dt: dt) -> dt:
+        """Convert a UTC datetime object to local timezone."""
         return utc_dt.replace(tzinfo=pytz.utc).astimezone(self.local_tz)
 
     def get_stops(self, tfl_id: str, timeout: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve StopPoint or Arrivals data from TfL API.
+        Uses retries with exponential backoff.
+        """
         retries = 0
         last_error = None
         while retries < MAX_RETRIES:
@@ -73,9 +97,15 @@ class TFLBusMonitor:
                 retries += 1
 
         logger.error("Max retries exceeded for StopPoint ID: %s. Last error: %s", tfl_id, last_error)
-        return {"arrivals": [{"noInfo": f"Failed to fetch data for {tfl_id} after {MAX_RETRIES} retries. Last error: {last_error}"}]}
+        return {"arrivals": [{"noInfo": f"Failed to fetch data for {tfl_id} after {MAX_RETRIES} retries. "
+                                        f"Last error: {last_error}"}]}
+
 
     def get_stop_name(self, stop_id: str) -> Optional[str]:
+        """
+        Get the human-readable name of a StopPoint using caching.
+        Falls back to querying the TfL API if not cached.
+        """
         if stop_id in self.stop_name_cache:
             return self.stop_name_cache[stop_id]
         json_result = self.get_stops(stop_id, 10)
@@ -85,34 +115,42 @@ class TFLBusMonitor:
         return stop_name
 
     def parse_arrival_item(self, item: Dict[str, Any], number: int) -> Dict[str, str]:
-        read_time = dt.strptime(item['expectedArrival'], "%Y-%m-%dT%H:%M:%SZ")
-        local_dt = self.utc_to_local(read_time)
-        arrival_time = local_dt.strftime(self.time_format)
-        away_min = math.floor(int(item['timeToStation']) / 60)
-        due_in = 'due' if away_min == 0 else f'{away_min}min'
-        clean_destination = item['destinationName']
-        for suffix in [
-            "Underground Station",
-            "Rail Station",
-            "DLR Station",
-            "Bus Station",
-            "Tram Stop",
-            "Coach Station"
-        ]:
-            clean_destination = clean_destination.replace(suffix, "").strip()
-        return {
-            "number": str(number),
-            "lineName": item['lineName'],
-            "destinationName": clean_destination,
-            "arrivalTime": arrival_time,
-            "dueIn": due_in
-        }
+        """
+        Convert a raw TfL arrival record into a clean display dictionary.
+        Includes time conversion and destination name cleanup.
+        """
+        try:
+            read_time = dt.strptime(item['expectedArrival'], "%Y-%m-%dT%H:%M:%SZ")
+            local_dt = self.utc_to_local(read_time)
+            arrival_time = local_dt.strftime(self.time_format)
+            away_min = math.floor(int(item['timeToStation']) / 60)
+            due_in = 'due' if away_min == 0 else f'{away_min}min'
+            clean_destination = item['destinationName']
+            for suffix in [
+                "Underground Station", "Rail Station", "DLR Station",
+                "Bus Station", "Tram Stop", "Coach Station"
+            ]:
+                clean_destination = clean_destination.replace(suffix, "").strip()
+            return {
+                "number": str(number),
+                "lineName": item['lineName'],
+                "destinationName": clean_destination,
+                "arrivalTime": arrival_time,
+                "dueIn": due_in
+            }
+        except Exception as e:
+            logger.warning("Skipping malformed item: %s", e)
+            return {"noInfo": "Malformed arrival data."}
 
     def get_arrival_times(self, stop_id: str, num_services: int) -> Dict[str, Union[str, List[Dict[str, str]]]]:
+        """
+        Get the next N arrivals for a given StopPoint ID.
+        Returns a dictionary with stop name, timestamp, and arrival list.
+        """
         services = []
         json_result = self.get_stops(f"{stop_id}/Arrivals", 10)
         if isinstance(json_result, list):
-            json_result.sort(key=lambda x: x["expectedArrival"])
+            json_result.sort(key=lambda x: x.get("expectedArrival", ""))
         stop_name = self.get_stop_name(stop_id)
         date_and_time = dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}")
         for i, item in enumerate(json_result or []):
@@ -128,27 +166,47 @@ class TFLBusMonitor:
         }
 
     def get_all_arrivals(self) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
+        """
+        Get arrival information for all stops listed in the config file.
+        """
         all_data = []
         try:
             self.config.read(self.config_file)
             if CONFIG_SECTION not in self.config:
                 logger.error("Config section '%s' not found in file: %s", CONFIG_SECTION, self.config_file)
-                return [{"stopName": "N/A", "dateAndTime": dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}"), "arrivals": [{"noInfo": f"Missing section '{CONFIG_SECTION}' in config."}]}]
+                return [{
+                    "stopName": "N/A",
+                    "dateAndTime": dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}"),
+                    "arrivals": [{"noInfo": f"Missing section '{CONFIG_SECTION}' in config."}]
+                }]
             stop_ids = self.config.getlist(CONFIG_SECTION, 'stopid')
             num_services_list = self.config.getlist(CONFIG_SECTION, 'num_services')
             for stop_id, num in zip(stop_ids, num_services_list):
                 all_data.append(self.get_arrival_times(stop_id, int(num)))
         except Exception as e:
             logger.exception("Failed to read config or retrieve arrivals: %s", e)
-            all_data.append({"stopName": "N/A", "dateAndTime": dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}"), "arrivals": [{"noInfo": "An error occurred while processing configuration."}]})
+            all_data.append({
+                "stopName": "N/A",
+                "dateAndTime": dt.now(self.local_tz).strftime(f"{self.date_format} {self.time_format}"),
+                "arrivals": [{"noInfo": "An error occurred while processing configuration."}]
+            })
         return all_data
 
 
 def main() -> None:
+    """
+    Command-line interface for retrieving and displaying TfL bus arrivals.
+    Supports both JSON and formatted text output, with optional filters.
+    """
+
     def print_json(data: Any) -> None:
+        """Pretty-print data as indented JSON."""
         print(json.dumps(data, indent=4))
 
-    def print_text(data: List[Dict[str, Any]], line_filter: Optional[str] = None, dest_filter: Optional[str] = None) -> None:
+    def print_text(data: List[Dict[str, Any]],
+                   line_filter: Optional[str] = None,
+                   dest_filter: Optional[str] = None) -> None:
+        """Print human-friendly formatted output with optional filters."""
         for stop in data:
             align = math.ceil((76 + len(stop['stopName'])) / 2)
             print(f"\033[1;33;40m{stop['stopName']:>{align}}\033[0m\n")
@@ -170,27 +228,28 @@ def main() -> None:
             print("\n")
 
     def formatter(prog: str) -> argparse.HelpFormatter:
+        """Custom help formatter with wider terminal width support."""
         return argparse.HelpFormatter(prog, max_help_position=100, width=200)
 
     parser = argparse.ArgumentParser(
-        description="Get arrival data (bus/tube) from TFL",
+        description="Get arrival data (bus/tube) from TfL",
         formatter_class=formatter
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-t', '--text', action='store_true', help='print formatted text')
-    group.add_argument('-j', '--json', action='store_true', help='pretty print json (default)')
-    parser.add_argument('-c', '--config', type=Path, help='path to local config file')
-    parser.add_argument('--route', type=str, help='filter by line name or bus number(e.g. "Victoria" or "73")')
+    group.add_argument('-j', '--json', action='store_true', help='pretty print JSON (default)')
+    parser.add_argument('-c', '--config', type=Path, help='path to custom config file')
+    parser.add_argument('--route', type=str, help='filter by line name or bus number (e.g. "Victoria" or "73")')
     parser.add_argument('--destination', type=str, help='filter by destination name (e.g. "Ealing Broadway")')
     args = parser.parse_args()
 
     monitor = TFLBusMonitor(config_file=args.config)
-    arrivals_json = monitor.get_all_arrivals()
+    arrivals = monitor.get_all_arrivals()
 
     if args.text:
-        print_text(arrivals_json, args.route, args.destination)
+        print_text(arrivals, args.route, args.destination)
     else:
-        print_json(arrivals_json)
+        print_json(arrivals)
 
 
 if __name__ == "__main__":
