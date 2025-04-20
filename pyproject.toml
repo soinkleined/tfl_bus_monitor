@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tfl_bus_monitor"
+version = "0.10"
+description = "TFL Bus Monitor - download Transport for London bus and tube arrival times"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "David Klein", email = "david@soinkleined.com" },
+]
+license = { text = "MIT" }
+keywords = ["tfl", "bus", "monitor", "transport", "london"]
+dependencies = [
+    "requests>=2.32.3",
+    "pytz>=2025.2",
+]
+urls = { Homepage = "https://www.soinkleined.com" }
+
+[project.scripts]
+busstop = "tfl_bus_monitor.tfl_bus_monitor:main"
+
+[tool.setuptools]
+packages = ["tfl_bus_monitor"]
+
+[tool.setuptools.package-data]
+tfl_bus_monitor = ["config/busstop_config.ini"]
+
